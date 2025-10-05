@@ -10,7 +10,6 @@ const DATA_FILE = path.join(__dirname, 'data.json');
 app.use(cors());
 app.use(express.json());
 
-// Initialize data file with default journey
 async function initializeData() {
   try {
     await fs.access(DATA_FILE);
@@ -32,18 +31,15 @@ async function initializeData() {
   }
 }
 
-// Read data
 async function readData() {
   const data = await fs.readFile(DATA_FILE, 'utf8');
   return JSON.parse(data);
 }
 
-// Write data
 async function writeData(data) {
   await fs.writeFile(DATA_FILE, JSON.stringify(data, null, 2));
 }
 
-// Get all journeys
 app.get('/api/journeys', async (req, res) => {
   try {
     const data = await readData();
@@ -53,7 +49,6 @@ app.get('/api/journeys', async (req, res) => {
   }
 });
 
-// Create new journey
 app.post('/api/journeys', async (req, res) => {
   try {
     const { name, totalMiles, members } = req.body;
@@ -69,4 +64,55 @@ app.post('/api/journeys', async (req, res) => {
       createdAt: new Date().toISOString()
     };
     
-    data.journey
+    data.journeys.push(newJourney);
+    await writeData(data);
+    res.json(newJourney);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create journey' });
+  }
+});
+
+app.post('/api/journeys/:id/steps', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { steps, memberName } = req.body;
+    const data = await readData();
+    
+    const journey = data.journeys.find(j => j.id === parseInt(id));
+    if (!journey) {
+      return res.status(404).json({ error: 'Journey not found' });
+    }
+    
+    journey.currentSteps += steps;
+    journey.lastUpdated = new Date().toISOString();
+    journey.lastUpdatedBy = memberName;
+    
+    await writeData(data);
+    res.json(journey);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to add steps' });
+  }
+});
+
+app.delete('/api/journeys/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const data = await readData();
+    
+    data.journeys = data.journeys.filter(j => j.id !== parseInt(id));
+    await writeData(data);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete journey' });
+  }
+});
+
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok' });
+});
+
+initializeData().then(() => {
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+});
